@@ -2,6 +2,7 @@
   "name": "api",
   "scripts": {
     "dev": "bun run --hot src/index.ts",
+    "start": "bun run src/index.ts",
     "db:generate": "bunx drizzle-kit generate --config=drizzle.config.ts",
     "db:push": "bunx drizzle-kit push --config=drizzle.config.ts",
     "db:studio": "bunx drizzle-kit studio --config=drizzle.config.ts"
