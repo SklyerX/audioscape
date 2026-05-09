@@ -1,0 +1,128 @@
+---
+title: Analysis
+---
+
+**Base URL**: `https://a.audioscape.skylerx.ir/api`\
+**Request Endpoint**: `/audio/analysis/:trackKey`
+
+---
+
+## Generating a track key
+
+You can generate a track on your end without ever having to hit the [Search](/docs/API/search) endpoint. If the track is in our database you'd get the results back, if not you have to hit the search endpoint.
+
+Why? Because the search endpoint populates a temporary cache with the metadata for the key that way the aggregator can fetch the proper source.
+
+```typescript
+export const generateTrackId = (artist: string, track: string) => {
+  const normalized = `${artist.toLowerCase().trim()}:${track.toLowerCase().trim()}`;
+  return crypto.createHash("sha256").update(normalized).digest("hex").slice(0, 16);
+};
+
+generateTrackId("Pink Floyd", "Money")
+// bc24aaa5a97c70ed
+```
+
+## Making a Request
+
+Making a request is very simple. Just hit the API with the trackKey you generated or got from the search endpoint
+
+```
+curl --request GET \
+  --url 'http://localhost:8888/api/audio/analysis/:trackId?artist=Pink%2BFloyd&track=Cymbaline' \
+  --header 'Authorization: Bearer as_live_079e341779985b0d63f110611c24759c783defd4fd2af388d347545b2c73abc9'
+```
+
+```javascript
+import axios from "axios";
+
+const options = {
+  method: 'GET',
+  url: 'https://a.audioscape.skylerx.ir/api/audio/analysis/:trackId',
+  headers: {
+    Authorization: 'Bearer YOU-API-KEY'
+  }
+};
+
+axios.request(options).then(function (response) {
+  console.log(response.data);
+}).catch(function (error) {
+  console.error(error);
+});
+```
+
+## Result
+
+The expected results should look something like the code block below.
+
+```json
+{
+  "success": true,
+  "data": {
+    "artist": "Brian Adams",
+    "trackKey": "43134f5237c98ee9",
+    "trackName": "Forgive",
+    "duration_ms": 273074,
+    "tempo": 135.04905700683594,
+    "key": 9,
+    "keyString": "A major",
+    "mode": 1,
+    "timeSignature": 4,
+    "energy": 0.8424511647783219,
+    "liveness": 0.6680610444810655,
+    "danceability": 0.47789607240702026,
+    "instrumentalness": 0.47906912973849103,
+    "speechiness": 0.5209308643970871,
+    "valence": 0.4132167218805669,
+    "arousal": 0.3710879431321071,
+    "approachability": 0.5510184189367936,
+    "engagement": 0.6465092692974738,
+    "mood": {
+      "happy": 0.867848354857415,
+      "sad": 0.361626232159324,
+      "relaxed": 0.8018692648038268,
+      "aggressive": 0.8255197047255933
+    },
+    "meta": {
+      "artist": "Brian Adams",
+      "track": "Forgive"
+    }
+  }
+}
+```
+| Field            | Description                                                                                  |
+| ---------------- | -------------------------------------------------------------------------------------------- |
+| artist           | The performing artist of the track.                                                          |
+| trackKey         | A unique identifier or hash for the track in the system/database.                            |
+| trackName        | The title of the song.                                                                       |
+| duration_ms      | The total duration of the track in milliseconds (273074 ms ≈ 4 min 33 sec).                  |
+| tempo            | Estimated tempo of the track in beats per minute (BPM).                                      |
+| key              | Numerical representation of the musical key (9 corresponds to A).                            |
+| keyString        | Human-readable musical key of the track (`A major`).                                         |
+| mode             | Musical mode where `1` = major and `0` = minor.                                              |
+| timeSignature    | Number of beats per measure (4 = common 4/4 time).                                           |
+| energy           | A measure of intensity and activity; higher values indicate a more energetic track.          |
+| liveness         | Probability that the recording contains a live audience or live performance characteristics. |
+| danceability     | How suitable the track is for dancing based on rhythm, tempo, and beat stability.            |
+| instrumentalness | Likelihood that the track contains little or no vocals.                                      |
+| speechiness      | Presence of spoken words or speech-like vocals in the track.                                 |
+| valence          | Musical positivity; higher values sound happier or more cheerful.                            |
+| arousal          | Emotional intensity or stimulation level evoked by the track.                                |
+| approachability  | Estimate of how accessible or easy the track is for listeners to enjoy.                      |
+| engagement       | Predicted ability of the track to retain listener attention or interest.                     |
+
+### Mood Metrics
+
+| Mood Field | Description                                             |
+| ---------- | ------------------------------------------------------- |
+| happy      | Predicted level of happiness conveyed by the song.      |
+| sad        | Predicted level of sadness conveyed by the song.        |
+| relaxed    | Predicted level of calmness or relaxation in the song.  |
+| aggressive | Predicted level of aggression or intensity in the song. |
+
+### Meta Information
+
+| Meta Field  | Description                                          |
+| ----------- | ---------------------------------------------------- |
+| meta.artist | Duplicate metadata field containing the artist name. |
+| meta.track  | Duplicate metadata field containing the track title. |

@@ -1,0 +1,118 @@
+---
+title: Webhooks
+---
+
+Get notified when a job completes.
+
+## Logic
+
+if you setup a webhook URL during your API-Key creation, or added a webhook url later you will this applies to you.
+
+When you request a track thats not in our database yet you will see something like this:
+
+```json
+{
+  "success": true,
+  "message": "Track has been queued for analysis."
+}
+```
+
+If you request it again and the track is still in queue you will see this:
+
+```json
+{
+  "success": true,
+  "message": "Track is currently being processed, please wait.",
+  "data": {
+    "trackKey": "b160e560ebc6895a",
+    "artist": "Rihanna",
+    "track": "Rihanna - Love On The Brain"
+  }
+}
+```
+
+Once the analysis has been finished you will get notified almost immediately meaning you don't need to poll the API for updates.
+
+## Webhook Payload
+
+### Body
+
+```json
+{
+    "artist": "Rihanna",
+    "trackKey": "b160e560ebc6895a",
+    "trackName": "Rihanna - Love On The Brain",
+    "duration_ms": 224000,
+    "tempo": 172.26504516601562,
+    "key": 7,
+    "keyString": "G major",
+    "mode": 1,
+    "timeSignature": 4,
+    "energy": 0.6827993639279157,
+    "liveness": 0.3630714151594374,
+    "danceability": 0.599591028294526,
+    "instrumentalness": 0.9785525463521481,
+    "speechiness": 0.02144745546820559,
+    "valence": 0.1739094993351279,
+    "arousal": 0.29635027785961693,
+    "approachability": 0.6238240066135272,
+    "engagement": 0.6715294219475958,
+    "mood": {
+      "happy": 0.4104960885597393,
+      "sad": 0.17749315086985007,
+      "relaxed": 0.5288644705433398,
+      "aggressive": 0.8643348808400333
+    },
+    "meta": {
+      "artist": "Rihanna",
+      "track": "Rihanna - Love On The Brain"
+    }
+}
+```
+
+Look at [analysis](/docs/API/analysis#result) if you want a more in-depth explanation of the payload (its the same for the webhook)
+
+### Header
+
+The signature is sent to you via the headers, look for `X-Signature` when trying to verify payload.
+
+### Verification
+
+In NodeJS its very simple to validate the HMAC signature, the easiest way to do this is to create another HMAC signature using your webhook secret (whsec_XXXXX) and the incoming payload.
+
+```typescript
+import crypto from "node:crypto";
+
+const WEBHOOK_SECRET = process.env.AUDIOSCAPE_WEBHOOK_SECRET;
+
+export function verifySignature(payload: string, signature: string) {
+    const localSignature = crypto.createHmac("sha256", WEBHOOK_SECRET).update(payload).digest("hex");
+
+    return crypto.timeSafeEqual(
+        Buffer.from(localSignature),
+        Buffer.from(signature)
+    )
+}
+
+// true or false
+```
+
+This returns a **true** or a **false** you can change this or implement this in your own way that matches your webhook design.
+
+#### Important Note - Time Safe Equals
+
+The reason we use timeSafeEqual rather then regular comparisons is to prevent timing attacks. Without `timeSafeEqual` you could be exposing yourself to potential attacks. Attackers are able to figure out key details about your secret through timing attacks. Be ware.
+
+## Testing
+
+If you do not have your app hosted anywhere yet but you want to test the webhook, use [nGrok](https://ngrok.com) or [Cloudflare Tunnels](https://developers.cloudflare.com/tunnel/) (recommended)
+
+If you do not have have even a local instance running, use something like [webhook.site](https://webhook.site) or [webhook.cool](https://webhook.cool) you can either trigger a job or visit the dashboard and use the **Test Webhook** button to get a payload
+
+### Using Cloudflare Tunnels
+
+```
+cloudflared tunnel --url http://localhost:8000 --protocol http2
+```
+
+Copy the URL, it should spit out something like `https://<something>.trycloudflare.com`, paste that URL into your key settings.

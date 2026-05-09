@@ -1,0 +1,49 @@
+---
+title: Contributing
+---
+
+This is an open source project, contributions are welcome. Whether its a bug fix, a new feature, or just improving the docs — its all appreciated.
+
+## Project Structure
+
+```
+audio-feat/
+├── packages/
+│   ├── api/       # Hono API server (auth, endpoints, key management)
+│   ├── worker/    # BullMQ worker (audio download + Essentia analysis)
+│   └── www/       # Next.js frontend (dashboard + docs)
+├── drizzle/       # DB migrations
+└── drizzle.config.ts
+```
+
+## Getting set up
+
+Clone the repo and install dependencies from the root
+
+```
+git clone https://github.com/sklyerx/audioscape.git
+cd audioscape
+bun install
+```
+
+Then follow the [self-hosting guide](/docs/self-hosting) to get Postgres and Redis running locally and fill in your `.env` files for each package.
+
+## Making changes
+
+Try to keep PRs focused. One thing per PR makes it a lot easier to review. If you're planning something big open an issue first so we're aligned before you spend a bunch of time on it.
+
+For bug fixes just go ahead and open a PR, no need to ask.
+
+## Where to contribute
+
+A few areas that could use help:
+
+- **Worker performance** — the Essentia worker could be faster, maybe a Python rewrite makes sense
+- **Model quality** — the pre-trained ONNX models from University Pompeu Fabra are good but not perfect, better models = better features
+- **More endpoints** — batch analysis, artist-level aggregations, etc.
+- **SDK / client libraries** — there's nothing official yet
+- **Docs** — if something confused you, fix it
+
+## Reporting bugs
+
+Open an issue on [GitHub](https://github.com/sklyerx/audioscape/issues) with as much context as you can — what you sent, what you got back, what you expected.

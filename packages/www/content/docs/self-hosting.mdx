@@ -1,0 +1,163 @@
+---
+title: Self hosting
+---
+
+## packages/api
+
+navigate into the project
+
+```
+cd packages/api && pnpm install
+```
+
+.env
+
+```
+DATABASE_URL="<>"
+BETTER_AUTH_SECRET="<>"
+
+BETTER_AUTH_URL="http://localhost:3000" # change to https://audioscape.skylerx.ir
+
+REDIS_CONNECTION_STRING="<regular redis connection url>"
+
+LAST_FM_API_KEY="<>"
+LAST_FM_SHARED_SECRET="<>" # unused in actual code, if you want additional features fill it in, if not remove it from here and the env.ts file
+
+SERVER_KEY="<>"
+
+PORT=8888
+
+GITHUB_CLIENT_ID="<>"
+GITHUB_CLIENT_SECRET="<>"
+
+GOOGLE_CLIENT_ID="<>"
+GOOGLE_CLIENT_SECRET="<>"
+
+NODE_ENV="development" # development | production
+BETTER_AUTH_URL="http://localhost:8888" # change to the production url when hosting
+```
+
+## packages/www
+
+navigate into the project
+
+```
+cd packages/www && pnpm install
+```
+
+.env
+
+```
+NEXT_PUBLIC_API_URL="http://localhost:8888" # hosted url
+```
+
+## packages/worker
+
+navigate into the project
+
+```
+cd packages/worker && pnpm install
+```
+
+```
+REDIS_CONNECTION_STRING="<>"
+SERVER_KEY="<>"
+API_BASE_URL="http://localhost:8888"
+```
+
+## General Self-hosting setup
+
+Navigate to the root directory of the project. Create a docker compose file if you don't already have one.
+
+```
+# docker-compose.yml
+services:
+  postgres:
+    image: postgres:17
+    container_name: local-postgres
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: app
+
+    ports:
+      - "5432:5432"
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:8-alpine
+    container_name: local-redis
+    restart: unless-stopped
+
+    ports:
+      - "6379:6379"
+
+    volumes:
+      - redis_data:/data
+
+    command: redis-server --appendonly yes
+
+volumes:
+  postgres_data:
+  redis_data:
+```
+
+```
+docker compose up -d
+```
+
+### Connect with these configs
+
+#### Postgres config
+
+```
+Host: localhost
+Port: 5432
+User: postgres
+Password: postgres
+Database: app
+```
+
+#### Redis Configs
+
+```
+Host: localhost
+Port: 6379
+```
+
+### TypeScript connection
+
+```typescript
+import Redis from "ioredis";
+
+export const redis = new Redis({
+  host: "localhost",
+  port: 6379,
+});
+```
+
+```typescript
+import { drizzle } from "drizzle-orm/node-postgres";
+import { Pool } from "pg";
+
+const pool = new Pool({
+  connectionString:
+    "postgres://postgres:postgres@localhost:5432/app",
+});
+
+export const db = drizzle(pool);
+```
+
+## Hosting (Cloud Provider)
+
+### Railway
+The simplest version is to create a Postgres and Redis instance on the same railway project, then connecting your github repo to it or using the `railway up` command in the project directory. Make sure that you use the internal connection strings to avoid extra network hops and outbound traffic costs
+
+Make sure to have 3 **different** projects (our packages) in the same railway project. Make sure the entry root for the projects match them the projects, for example if you're hosting the **packages/worker** project, the entry root on the railway configuration for that specific project would be `./packages/workers`
+
+### Vercel
+Navigate to [Vercel](https://vercel.com) and create a new project, click on the project, select `packages/www`, fill the `.env` with the hosted API url OR alternatively you can navigate to the folder `cd packages/www` and do `vercel deploy`

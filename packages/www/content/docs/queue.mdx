@@ -1,0 +1,87 @@
+---
+title: Queue
+---
+
+Audio analysis isn't instant. When you request a track that isn't in our database yet, it gets thrown into a BullMQ queue where a worker picks it up, downloads the source audio from YouTube, runs it through Essentia, and writes the result to the database.
+
+## How it works
+
+```
+Request → Track not in DB → Added to queue → Worker picks it up → Analysis runs → Result saved → Webhook fired (if set)
+```
+
+The first time you request a track you'll get back:
+
+```json
+{
+  "success": true,
+  "message": "Track has been queued for analysis."
+}
+```
+
+If you hit the same track again while its still being processed:
+
+```json
+{
+  "success": true,
+  "message": "Track is currently being processed, please wait.",
+  "data": {
+    "trackKey": "b160e560ebc6895a",
+    "artist": "Rihanna",
+    "track": "Rihanna - Love On The Brain"
+  }
+}
+```
+
+Once the worker is done the result gets written to the database and your webhook fires (if you set one up). The next time you request the same track it'll come back immediately — no queue, no wait.
+
+## Timing
+
+Analysis time varies depending on track length and current queue depth. Shorter tracks process faster, longer ones obviously take more time. On average expect somewhere between **10–40 seconds** for a typical 3–4 minute song.
+
+There's no way to check queue position right now. If you need to know when a track is done, use [webhooks](/docs/webhooks) instead of polling.
+
+## Polling vs Webhooks
+
+You can poll the analysis endpoint until you get a result back, but its not ideal. A cleaner approach is to set a webhook URL on your key and just wait for the payload to arrive.
+
+If you don't have a webhook set up and still want to poll:
+
+```typescript
+async function waitForAnalysis(trackKey: string, apiKey: string) {
+  const url = `https://a.audioscape.skylerx.ir/api/audio/analysis/${trackKey}`;
+
+  while (true) {
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+
+    const data = await res.json();
+
+    if (data.data?.tempo) return data; // analysis is done
+
+    await new Promise((r) => setTimeout(r, 5000)); // wait 5s and retry
+  }
+}
+```
+
+This works but webhooks are cleaner. Check out the [webhooks](/docs/webhooks) page for setup.
+
+## Rate Limits
+
+There's no monthly limit per key. You can make over **100 requests per second** before hitting any throttling. For most use cases you won't run into this.
+
+The queue itself is the bottleneck, not the API. Once a track is in the database requests are fast.
+
+## Pre-generating track keys
+
+If you already know the artist and track name you don't have to hit the [search](/docs/API/search) endpoint first. You can generate the track key yourself and go straight to analysis.
+
+```typescript
+export const generateTrackId = (artist: string, track: string) => {
+  const normalized = `${artist.toLowerCase().trim()}:${track.toLowerCase().trim()}`;
+  return crypto.createHash("sha256").update(normalized).digest("hex").slice(0, 16);
+};
+```
+
+If the track is already in the database you'll get the result back immediately. If not, it gets queued. Either way you only need one request.

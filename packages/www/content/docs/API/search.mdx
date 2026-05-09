@@ -1,0 +1,90 @@
+---
+title: Search
+---
+
+**Base URL**: `https://a.audioscape.skylerx.ir/api`\
+**Request Endpoint**: `/audio/search`
+
+The search endpoint will reveals data based on your query with using the [Last.fm](https://last.fm) API.
+
+
+| Params | Track *required* | Artist *optional* |
+| -------- | -------- | -------- |
+| track    | Cymbaline     | Pink+Floyd     |
+
+The constructed should look something like this:
+- No Artist:
+    - `https://a.audioscape.skylerx.ir/api/audio/search?track=Cymbaline`
+- With Artist:
+    - `https://a.audioscape.skylerx.ir/api/audio/search?track=Cymbaline&artist=Pink+Floyd`
+
+
+Tracks and artists with spaces in their names should be replaced with a `+`
+
+Meaning:\
+`Pink Floyd -> Pink+Floyd`\
+`Shine On You Crazy Diamond Pts 1-5 -> Shine+On+You+Crazy+Diamond+Pts+1+5`\
+`On Bs -> On+Bs`
+
+## Making a Request
+
+```
+curl --request GET \
+  --url 'https://a.audioscape.skylerx.ir/api/audio/search?artist=Pink%2BFloyd&track=Cymbaline' \
+  --header 'Authorization: Bearer YOUR-API-KEY'
+```
+
+```js
+import axios from "axios";
+
+const options = {
+  method: 'GET',
+  url: 'https://a.audioscape.skylerx.ir/api/audio/search',
+  params: {artist: 'Pink+Floyd', track: 'Cymbaline'},
+  headers: {
+    Authorization: 'Bearer YOUR-API-KEY'
+  }
+};
+
+axios.request(options).then(function (response) {
+  console.log(response.data);
+}).catch(function (error) {
+  console.error(error);
+});
+```
+
+## Expected output
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "trackName": "Cymbaline",
+      "artist": "Pink Floyd",
+      "thumbnailUrl": "https://lastfm.freetls.fastly.net/i/u/174s/2a96cbd8b46e442fc41c2b86b821562f.png",
+      "trackKey": "f63116f780b3b1eb",
+      "match_score": 0.9470588235294117
+    },
+    {
+      "trackName": "06 - Cymbaline",
+      "artist": "Pink Floyd",
+      "thumbnailUrl": "https://lastfm.freetls.fastly.net/i/u/174s/2a96cbd8b46e442fc41c2b86b821562f.png",
+      "trackKey": "a8f2836518d1c504",
+      "match_score": 0.836532507739938
+    },
+  ]
+  ...
+}
+```
+
+### Fields
+
+| Field          | Description                                                         |
+| -------------- | ------------------------------------------------------------------- |
+| `trackName`    | Name of the track                                                   |
+| `artist`       | Artist for the track                                                |
+| `thumbnailUrl` | Thumbnail of the album cover *(last.fm is inconsistent with these)* |
+| `trackKey`     | A unique identifier for the track                                   |
+| `match_score`  | How accurate this result is to your original query                  |
+

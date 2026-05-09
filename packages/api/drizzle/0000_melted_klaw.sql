@@ -1,0 +1,20 @@
+CREATE TABLE "tracks" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"artist" text NOT NULL,
+	"track_name" text NOT NULL,
+	"duration_ms" integer,
+	"acousticness" double precision,
+	"danceability" double precision,
+	"energy" double precision,
+	"instrumentalness" double precision,
+	"key" integer,
+	"liveness" double precision,
+	"loudness" double precision,
+	"mode" integer,
+	"speechiness" double precision,
+	"tempo" double precision,
+	"time_signature" integer,
+	"valence" double precision,
+	"analyzed_at" timestamp DEFAULT now(),
+	"metadata" jsonb
+);

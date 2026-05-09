@@ -1,0 +1,22 @@
+{
+  "name": "audioscape",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:api": "bun run --cwd packages/api dev",
+    "dev:worker": "bun run --cwd packages/worker dev"
+  },
+  "dependencies": {
+    "bullmq": "^5.76.5",
+    "onnxruntime-node": "^1.25.1"
+  },
+  "trustedDependencies": [
+    "@tensorflow/tfjs-node",
+    "core-js",
+    "esbuild",
+    "msgpackr-extract",
+    "onnxruntime-node"
+  ]
+}

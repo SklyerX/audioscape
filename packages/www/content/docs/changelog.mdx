@@ -1,0 +1,24 @@
+---
+title: Changelog
+---
+
+You can read about the new updates that have taken place, see what changes, what you should change, or just catch up on the latest news
+
+## v1.1.0
+
+- Added webhook support — set a URL on your key and get notified the moment a track finishes analysis
+- Added **Test Webhook** button in the dashboard so you can verify your endpoint without triggering a real job
+- Rate limit raised to 100+ requests per second
+- Queue status response now includes `trackKey`, `artist`, and `track` fields so you don't have to track that yourself
+- Minor bug fixes to the BullMQ worker around duplicate job detection
+
+## v1.0.0
+
+This is the first version published, this version consists of the base model as Essentia built around the ONNX models.
+
+- `/audio/search` endpoint powered by Last.fm
+- `/audio/analysis/:trackKey` endpoint for fetching audio features
+- API key creation and management via the dashboard
+- BullMQ-backed async analysis queue
+- Postgres + Redis infrastructure
+- GitHub and Google OAuth support
