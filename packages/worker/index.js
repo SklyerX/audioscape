@@ -544,14 +544,10 @@ const analyzeTrack = async (job) => {
 };
 
 init().then(() => {
-  // const worker = new Worker("audio-analysis", analyzeTrack, {
-  //   connection: { url: process.env.REDIS_CONNECTION_STRING },
-  //   concurrency: 5,
-  // });
-  // worker.on("completed", (job) => console.log(`done: ${job.id}`));
-  // worker.on("failed", (job, err) => console.error(`failed: ${job.id}`, err));
-
-  analyzeTrack({
-    data: { artist: "Pink Floyd", track: "Marooned", trackKey: "Something" },
+  const worker = new Worker("audio-analysis", analyzeTrack, {
+    connection: { url: process.env.REDIS_CONNECTION_STRING },
+    concurrency: 5,
   });
+  worker.on("completed", (job) => console.log(`done: ${job.id}`));
+  worker.on("failed", (job, err) => console.error(`failed: ${job.id}`, err));
 });
