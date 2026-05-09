@@ -1,6 +1,5 @@
 require("dotenv/config");
 
-const { Essentia, EssentiaWASM } = require("essentia.js");
 const ort = require("onnxruntime-node");
 const { exec } = require("child_process");
 const { promisify } = require("util");
@@ -10,7 +9,6 @@ const fs = require("fs");
 
 const execAsync = promisify(exec);
 
-let essentia;
 const models = {};
 
 const MODELS_DIR = path.join(__dirname, "models");
@@ -30,15 +28,12 @@ const MODEL_FILES = {
 };
 
 const init = async () => {
-  essentia = new Essentia(EssentiaWASM);
-
   for (const [key, value] of Object.entries(MODEL_FILES)) {
     models[key] = await ort.InferenceSession.create(
       path.join(MODELS_DIR, value),
     );
   }
-
-  console.log("Essentia loaded with models");
+  console.log("Models loaded");
 };
 
 const loadAudio = async (audioPath, sampleRate = 16000, maxSeconds = null) => {
@@ -206,10 +201,178 @@ function computeMusicnnPatches(samples) {
   return { data, dims: [batchSize, PATCH_FRAMES, N_MELS] };
 }
 
+// Onset-strength autocorrelation tempo detector (replaces Essentia RhythmExtractor2013)
+function detectTempo(samples, sampleRate = 44100) {
+  const frameSize = 2048;
+  const hopSize = 512;
+  const window = hannWindow(frameSize);
+
+  let prevMag = null;
+  const onset = [];
+
+  for (let start = 0; start + frameSize <= samples.length; start += hopSize) {
+    const re = new Float32Array(frameSize);
+    const im = new Float32Array(frameSize);
+    for (let i = 0; i < frameSize; i++) re[i] = samples[start + i] * window[i];
+    fft(re, im);
+
+    const mag = new Float32Array(frameSize / 2);
+    for (let i = 0; i < frameSize / 2; i++)
+      mag[i] = Math.sqrt(re[i] * re[i] + im[i] * im[i]);
+
+    if (prevMag) {
+      let flux = 0;
+      for (let i = 0; i < frameSize / 2; i++) {
+        const d = mag[i] - prevMag[i];
+        if (d > 0) flux += d;
+      }
+      onset.push(flux);
+    }
+    prevMag = mag;
+  }
+
+  const fps = sampleRate / hopSize;
+  const minPeriod = Math.max(1, Math.round((fps * 60) / 208));
+  const maxPeriod = Math.round((fps * 60) / 40);
+
+  let bestPeriod = minPeriod;
+  let bestCorr = -Infinity;
+
+  for (
+    let period = minPeriod;
+    period <= maxPeriod && period < onset.length;
+    period++
+  ) {
+    let corr = 0;
+    const n = onset.length - period;
+    for (let i = 0; i < n; i++) corr += onset[i] * onset[i + period];
+    corr /= n;
+    if (corr > bestCorr) {
+      bestCorr = corr;
+      bestPeriod = period;
+    }
+  }
+
+  let bpm = (fps * 60) / bestPeriod;
+
+  // Prefer half-tempo if above 140 BPM — avoids double-time detection
+  if (bpm > 140) {
+    const half = bpm / 2;
+    if (half >= 40) bpm = half;
+  }
+
+  return bpm;
+}
+
+// Krumhansl-Schmuckler chromagram key detector (replaces Essentia KeyExtractor)
+function detectKey(samples, sampleRate = 44100) {
+  const frameSize = 4096;
+  const hopSize = 2048;
+  const window = hannWindow(frameSize);
+  const chroma = new Float32Array(12);
+
+  for (let start = 0; start + frameSize <= samples.length; start += hopSize) {
+    const re = new Float32Array(frameSize);
+    const im = new Float32Array(frameSize);
+    for (let i = 0; i < frameSize; i++) re[i] = samples[start + i] * window[i];
+    fft(re, im);
+
+    for (let k = 1; k < frameSize / 2; k++) {
+      const freq = (k * sampleRate) / frameSize;
+      if (freq < 27.5 || freq > 4186) continue;
+      const midi = 12 * Math.log2(freq / 440) + 69;
+      const pc = ((Math.round(midi) % 12) + 12) % 12;
+      chroma[pc] += Math.sqrt(re[k] * re[k] + im[k] * im[k]);
+    }
+  }
+
+  const chromaMax = Math.max(...chroma);
+  if (chromaMax > 0) for (let i = 0; i < 12; i++) chroma[i] /= chromaMax;
+
+  const majorProfile = [
+    6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88,
+  ];
+  const minorProfile = [
+    6.33, 2.68, 3.52, 5.38, 2.6, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17,
+  ];
+  const KEY_NAMES = [
+    "C",
+    "C#",
+    "D",
+    "D#",
+    "E",
+    "F",
+    "F#",
+    "G",
+    "G#",
+    "A",
+    "A#",
+    "B",
+  ];
+
+  const pearson = (a, b) => {
+    const n = a.length;
+    const ma = a.reduce((s, x) => s + x, 0) / n;
+    const mb = b.reduce((s, x) => s + x, 0) / n;
+    let num = 0,
+      da = 0,
+      db = 0;
+    for (let i = 0; i < n; i++) {
+      num += (a[i] - ma) * (b[i] - mb);
+      da += (a[i] - ma) ** 2;
+      db += (b[i] - mb) ** 2;
+    }
+    return num / Math.sqrt(da * db);
+  };
+
+  let bestKey = 0,
+    bestScale = "major",
+    bestCorr = -Infinity;
+
+  for (let root = 0; root < 12; root++) {
+    const rotated = Array.from(
+      { length: 12 },
+      (_, i) => chroma[(root + i) % 12],
+    );
+    const mc = pearson(rotated, majorProfile);
+    const nc = pearson(rotated, minorProfile);
+    if (mc > bestCorr) {
+      bestCorr = mc;
+      bestKey = root;
+      bestScale = "major";
+    }
+    if (nc > bestCorr) {
+      bestCorr = nc;
+      bestKey = root;
+      bestScale = "minor";
+    }
+  }
+
+  return { key: KEY_NAMES[bestKey], scale: bestScale };
+}
+
+// Loudness variation (replaces Essentia DynamicComplexity)
+function computeDynamicComplexity(samples, sampleRate = 44100) {
+  const frameSize = Math.round(sampleRate * 0.2);
+  const hopSize = Math.round(frameSize / 2);
+  const rms = [];
+
+  for (let start = 0; start + frameSize <= samples.length; start += hopSize) {
+    let sum = 0;
+    for (let i = 0; i < frameSize; i++) sum += samples[start + i] ** 2;
+    rms.push(Math.sqrt(sum / frameSize));
+  }
+
+  if (rms.length === 0) return 0;
+  const mean = rms.reduce((s, x) => s + x, 0) / rms.length;
+  const variance = rms.reduce((s, x) => s + (x - mean) ** 2, 0) / rms.length;
+  // Scale std to roughly [0, 9] range to match original DynamicComplexity output
+  return Math.sqrt(variance) * 30;
+}
+
 const sigmoid = (x) => 1 / (1 + Math.exp(-x));
 const clamp01 = (x) => Math.max(0, Math.min(1, x));
 
-// Average a single output column across all effnet batch rows
 const meanOf = (tensorMap, classIdx = null) => {
   const arr = tensorMap[Object.keys(tensorMap)[0]].cpuData;
   const nEffnet = 64;
@@ -220,14 +383,12 @@ const meanOf = (tensorMap, classIdx = null) => {
   return sum / nEffnet;
 };
 
-// Average a column from a flat Float32Array with given stride
 const meanCol = (data, nRows, col, stride) => {
   let sum = 0;
   for (let i = 0; i < nRows; i++) sum += data[i * stride + col];
   return sum / nRows;
 };
 
-// MUSE outputs valence/arousal in the DEAM range [1, 9] — normalize to [0, 1]
 const deamNorm = (x) => clamp01((x - 1) / 8);
 
 const analyzeTrack = async (job) => {
@@ -257,30 +418,9 @@ const analyzeTrack = async (job) => {
     );
     const duration_ms = Math.round(parseFloat(probeOut.trim()) * 1000);
 
-    // Tempo
-    // Full 44.1k signal, no cap means more context means better rhythm analysis
-    const signal44k = essentia.arrayToVector(audioSamples44k);
+    const tempo = detectTempo(audioSamples44k, 44100);
 
-    const rhythm = essentia.RhythmExtractor2013(
-      signal44k,
-      208,
-      "multifeature",
-      40,
-    );
-    let tempo = rhythm.bpm;
-
-    try {
-      const candidates = essentia.vectorToArray(rhythm.bpmCandidates);
-      if (candidates && candidates.length > 0) {
-        const half = candidates.find((c) => Math.abs(c - tempo / 2) < 5);
-        if (half) tempo = half;
-      }
-    } catch {
-      // bpmCandidates unavailable, stick with raw bpm
-    }
-
-    // Key / mode
-    const keyData = essentia.KeyExtractor(signal44k);
+    const keyData = detectKey(audioSamples44k, 44100);
     const KEY_NAMES = [
       "C",
       "C#",
@@ -299,11 +439,9 @@ const analyzeTrack = async (job) => {
     const keyString = `${keyData.key} ${keyData.scale}`;
     const mode = keyData.scale === "major" ? 1 : 0;
 
-    // Liveness
-    const dynComplexity = essentia.DynamicComplexity(signal44k);
-    const liveness = clamp01(dynComplexity.dynamicComplexity / 9);
+    const dynComplexity = computeDynamicComplexity(audioSamples44k, 44100);
+    const liveness = clamp01(dynComplexity / 9);
 
-    // effnet embeddings
     const mel = computeMelPatches(audioSamples);
     const effnetInput = new ort.Tensor("float32", mel.data, mel.dims);
     const effnetOutput = await models.effnet.run({
@@ -338,7 +476,6 @@ const analyzeTrack = async (job) => {
       meanOf(mood_aggressive, 1) * 0.6 + meanOf(mood_happy, 1) * 0.4,
     );
 
-    // ── MusicNN → MUSE (valence + arousal) ──────────────────────────────────
     const musicnnMel = computeMusicnnPatches(audioSamples);
     const musicnnInput = new ort.Tensor(
       "float32",
@@ -357,7 +494,6 @@ const analyzeTrack = async (job) => {
     const museData = museOutput["model/Identity:0"].cpuData;
     const nMuse = musicnnMel.dims[0];
 
-    // MUSE columns: [valence, arousal], stride 2, DEAM range [1, 9]
     const valence = deamNorm(meanCol(museData, nMuse, 0, 2));
     const arousal = deamNorm(meanCol(museData, nMuse, 1, 2));
 
@@ -408,10 +544,14 @@ const analyzeTrack = async (job) => {
 };
 
 init().then(() => {
-  const worker = new Worker("audio-analysis", analyzeTrack, {
-    connection: { url: process.env.REDIS_CONNECTION_STRING },
-    concurrency: 5,
+  // const worker = new Worker("audio-analysis", analyzeTrack, {
+  //   connection: { url: process.env.REDIS_CONNECTION_STRING },
+  //   concurrency: 5,
+  // });
+  // worker.on("completed", (job) => console.log(`done: ${job.id}`));
+  // worker.on("failed", (job, err) => console.error(`failed: ${job.id}`, err));
+
+  analyzeTrack({
+    data: { artist: "Pink Floyd", track: "Marooned", trackKey: "Something" },
   });
-  worker.on("completed", (job) => console.log(`done: ${job.id}`));
-  worker.on("failed", (job, err) => console.error(`failed: ${job.id}`, err));
 });
