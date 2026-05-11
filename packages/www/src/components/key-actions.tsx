@@ -36,6 +36,7 @@ function CopyButton({ value }: { value: string }) {
   const [copied, setCopied] = useState(false);
   return (
     <button
+      type="button"
       onClick={() => {
         navigator.clipboard.writeText(value);
         setCopied(true);
@@ -121,10 +122,8 @@ export default function KeyActions({ id, name, webhookUrl, revoked }: Props) {
   return (
     <>
       <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon" className="size-8 cursor-pointer">
-            <MoreHorizontal className="size-4" />
-          </Button>
+        <DropdownMenuTrigger className="inline-flex items-center justify-center size-8 cursor-pointer rounded-md hover:bg-muted hover:text-foreground">
+          <MoreHorizontal className="size-4" />
         </DropdownMenuTrigger>
         <DropdownMenuContent className="w-full" align="end">
           <DropdownMenuItem
@@ -179,6 +178,7 @@ export default function KeyActions({ id, name, webhookUrl, revoked }: Props) {
             </div>
             <div>
               <Label>Extend Expiry</Label>
+              {/* @ts-ignore */}
               <Select onValueChange={setEditExpiry}>
                 <SelectTrigger className="w-full mt-1">
                   <SelectValue placeholder="Keep current expiry" />
