@@ -88,7 +88,7 @@ const WEBHOOK_SECRET = process.env.AUDIOSCAPE_WEBHOOK_SECRET;
 export function verifySignature(payload: string, signature: string) {
     const localSignature = crypto.createHmac("sha256", WEBHOOK_SECRET).update(payload).digest("hex");
 
-    return crypto.timeSafeEqual(
+    return crypto.timingSafeEqual(
         Buffer.from(localSignature),
         Buffer.from(signature)
     )
